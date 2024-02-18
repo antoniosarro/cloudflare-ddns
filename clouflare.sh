@@ -31,6 +31,17 @@ telegram_token=""
 telegram_chat_id=""
 
 ##########################################
+# Check if the dependencies are installed
+##########################################
+dependencies=(jq curl)
+for dependency in "${dependencies[@]}"; do
+  if ! command -v "$dependency" &> /dev/null; then
+    echo "Cloudflare DDNS: $dependency is not installed. Please install $dependency and try again."
+    exit 1
+  fi
+done
+
+##########################################
 ## Check if the IP is public or not
 ##########################################
 ip=$(curl -s -4 https://cloudflare.com/cdn-cgi/trace | grep -E '^ip'); ret=$?
