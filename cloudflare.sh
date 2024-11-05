@@ -25,10 +25,10 @@ records_name=""
 ttl=""
 # Whether the record is receiving the performance and security benefits of Cloudflare. Can be true or false
 proxy=""
-# Telegram bot token for notification
-telegram_token=""
-# Telegram chat id for notification
-telegram_chat_id=""
+# Gotify url for notification
+gotify_url=""
+# Gotify token for notification
+gotify_token=""
 
 ##########################################
 # Check if the dependencies are installed
