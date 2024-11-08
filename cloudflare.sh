@@ -1,10 +1,10 @@
 #!/bin/bash
 
 ## Cloudflare DDNS Script
-## Author: https://github.com/asarro99
-## Github: https://github.com/asarro99/cloudflare-ddns
-## Version: 1.0.0
-## Date: 2024-02-18
+## Author: https://github.com/antoniosarro
+## Github: https://github.com/asantoniosarroarro99/cloudflare-ddns
+## Version: 1.0.1
+## Date: 2024-11-08
 ## Usage: ./clouflare.sh
 
 ##########################################
@@ -106,14 +106,14 @@ for record_name in "${records_name[@]}"; do
   case $(echo "$update_result" | jq -r '.success') in
     true)
       echo "Cloudflare DDNS: Record $record_name updated successfully. Old IP: $old_ip. New IP: $ip"
-      if [[ $telegram_token != "" ]]; then
-        curl -s -X POST https://api.telegram.org/bot"$telegram_token"/sendMessage -d chat_id="$telegram_chat_id" -d text="Record $record_name updated successfully. Old IP: $old_ip. New IP: $ip"
+      if [[ $gotify_url != "" ]]; then
+        curl -s -X POST "$gotify_url"/message?token="$gotify_token" -F "title=Record $record_name updated successfully" -F "message=Old IP: $old_ip. New IP: $ip" -F "priority=5"
       fi
       ;;
     false)
       echo "Cloudflare DDNS: Failed to update record $record_name. Old IP: $old_ip. New IP: $ip"
-      if [[ $telegram_token != "" ]]; then
-        curl -s -X POST https://api.telegram.org/bot"$telegram_token"/sendMessage -d chat_id="$telegram_chat_id" -d text="Failed to update record $record_name. Old IP: $old_ip. New IP: $ip"
+      if [[ $gotify_url != "" ]]; then
+        curl -s -X POST "$gotify_url"/message?token="$gotify_token" -F "title=Failed to update record $record_name" -F "message=Old IP: $old_ip. New IP: $ip" -F "priority=5"
       fi
       exit 1
       ;;
