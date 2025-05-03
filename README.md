@@ -13,16 +13,12 @@ Its support telegram notification too.
 Before using it, be sure to change the variables in the script.
 
 ```
-./cloudflare.sh
+./cloudflare_ddns.sh
 ```
 
 ## Usage with crontab
 
 ```
 # Run every 5 minutes
-*/5 * * * * /path/to/cloudflare.sh
+*/5 * * * * /path/to/cloudflare_ddns.sh
 ```
-
-## License
-
-MIT

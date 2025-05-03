@@ -2,33 +2,43 @@
 
 ## Cloudflare DDNS Script
 ## Author: https://github.com/antoniosarro
-## Github: https://github.com/asantoniosarroarro99/cloudflare-ddns
-## Version: 1.0.1
-## Date: 2024-11-08
-## Usage: ./clouflare.sh
+## Github: https://github.com/antoniosarro/cloudflare-ddns
+## Version: 1.1.0
+## Date: 2025-05-03
+## Usage: ./cloudflare_ddns.sh
 
 ##########################################
 ## Variables
 ##########################################
 
 # Email used to login into Cloudflare account
-auth_email=""
+auth_email="${AUTH_EMAIL:?AUTH_EMAIL not set}"
 # Authentication Method - Can be set "global" for Global API Key or "token" for Scoped API token
-auth_mehtod=""
+auth_method="${AUTH_METHOD:?AUTH_METHOD not set}"
 # Global API Key or Scoped API Token
-auth_key=""
+auth_key="${AUTH_KEY:?AUTH_KEY not set}"
 # Cloudflare Zone ID
-zone_id=""
+zone_id="${ZONE_ID:?ZONE_ID not set}"
 # Cloudflare Records Name to update (can be a single record or multiple records separated by comma)
-records_name=""
+records_name="${RECORDS_NAME:?RECORDS_NAME not set}"
 # DNS TTL - Setting to 1 means 'automatic'. Value must be between 60 and 86400
-ttl=""
-# Whether the record is receiving the performance and security benefits of Cloudflare. Can be true or false
-proxy=""
+ttl="${TTL:-1}" # Default to 1 if not set
+# Whether the record is receiving the performance and security benefits of Cloudflare. Can be true or false.  Can be a comma-separated list.
+proxies="${PROXIES:-true}" # Default to true
 # Gotify url for notification
-gotify_url=""
+gotify_url="${GOTIFY_URL:-}" # Optional
 # Gotify token for notification
-gotify_token=""
+gotify_token="${GOTIFY_TOKEN:-}" # Optional
+
+# Function to send Gotify notification
+send_gotify_notification() {
+  local title="$1"
+  local message="$2"
+  if [[ -n "$gotify_url" && -n "$gotify_token" ]]; then
+    curl -s -X POST "$gotify_url"/message?token="$gotify_token" \
+      -F "title=$title" -F "message=$message" -F "priority=5"
+  fi
+}
 
 ##########################################
 # Check if the dependencies are installed
@@ -55,10 +65,13 @@ fi
 ##########################################
 ## Set Auth Header
 ##########################################
-if [[ $auth_mehtod == "global" ]]; then
+if [[ $auth_method == "global" ]]; then
   auth_header="X-Auth-Key:"
-elif [[ $auth_mehtod == "token" ]]; then
+elif [[ $auth_method == "token" ]]; then
   auth_header="Authorization: Bearer"
+else
+  echo "Cloudflare DDNS: Invalid AUTH_METHOD.  Must be 'global' or 'token'."
+  exit 1
 fi
 
 ##########################################
@@ -66,15 +79,38 @@ fi
 ##########################################
 echo "Cloudflare DDNS: Checking if records exist"
 
-IFS=',' read -r -a records_name <<< "$records_name"
-for record_name in "${records_name[@]}"; do
+IFS=',' read -r -a records_name_array <<< "$records_name"
+IFS=',' read -r -a proxies_array <<< "$proxies"
+
+for i in "${!records_name_array[@]}"; do
+  record_name="${records_name_array[$i]}"
+
+  # Determine the proxy setting for this record.
+  if [[ ${#proxies_array[@]} -gt "$i" ]]; then
+    proxy="${proxies_array[$i]}"
+  else
+    # If not enough proxies are provided, use the first one.
+    proxy="${proxies_array[0]}"
+  fi
+
+  # Ensure proxy is lower case
+  proxy_lc=$(echo "$proxy" | tr '[:upper:]' '[:lower:]')
+
+  if [[ "$proxy_lc" != "true" && "$proxy_lc" != "false" ]]; then
+     echo "Cloudflare DDNS: Invalid proxy value '$proxy' for record '$record_name'.  Must be 'true' or 'false'."
+     exit 1
+  fi
+
   records=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records?type=A&name=$record_name" \
     -H "X-Auth-Email: $auth_email" \
     -H "Content-Type: application/json" \
     -H "$auth_header $auth_key")
 
+  echo "$records"
+
   if [[ $(echo "$records" | jq -r '.result | length') == 0 ]]; then
     echo "Cloudflare DDNS: Record $record_name does not exist. Please create the record and try again."
+    send_gotify_notification "Error: Record Not Found" "Record $record_name does not exist."
     exit 1
   fi
 
@@ -85,39 +121,35 @@ for record_name in "${records_name[@]}"; do
   # ########################################
   old_ip=$(echo "$records" | jq -r '.result[0].content')
   if [[ $old_ip == "$ip" ]]; then
-    echo "Cloudflare DDNS: IP has not changed"
-    exit 0
+    echo "Cloudflare DDNS: IP has not changed for record $record_name"
+    continue # Move to the next record
   fi
 
-  echo "Cloudflare DDNS: IP changed from $old_ip to $ip"
+  echo "Cloudflare DDNS: IP changed from $old_ip to $ip for record $record_name"
 
   ##########################################
   # Update record IP
   # ########################################
   echo "Cloudflare DDNS: Updating record $record_name"
-  
+
   record_id=$(echo "$records" | jq -r '.result[0].id')
-  update_result=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records/$record_id" \
+  update_result=$(curl -s -X PATCH "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records/$record_id" \
     -H "X-Auth-Email: $auth_email" \
     -H "Content-Type: application/json" \
     -H "$auth_header $auth_key" \
-    --data "{\"type\":\"A\",\"name\":\"$record_name\",\"content\":\"$ip\",\"ttl\":$ttl,\"proxied\":$proxy}")
+    -d "{\"type\":\"A\",\"name\":\"$record_name\",\"content\":\"$ip\",\"ttl\":$ttl,\"proxied\":$proxy_lc}")
   
   case $(echo "$update_result" | jq -r '.success') in
     true)
-      echo "Cloudflare DDNS: Record $record_name updated successfully. Old IP: $old_ip. New IP: $ip"
-      if [[ $gotify_url != "" ]]; then
-        curl -s -X POST "$gotify_url"/message?token="$gotify_token" -F "title=Record $record_name updated successfully" -F "message=Old IP: $old_ip. New IP: $ip" -F "priority=5"
-      fi
+      message="Record $record_name updated successfully. Old IP: $old_ip. New IP: $ip"
+      echo "Cloudflare DDNS: $message"
+      send_gotify_notification "Record Updated" "$message"
       ;;
     false)
-      echo "Cloudflare DDNS: Failed to update record $record_name. Old IP: $old_ip. New IP: $ip"
-      if [[ $gotify_url != "" ]]; then
-        curl -s -X POST "$gotify_url"/message?token="$gotify_token" -F "title=Failed to update record $record_name" -F "message=Old IP: $old_ip. New IP: $ip" -F "priority=5"
-      fi
+      message="Failed to update record $record_name. Old IP: $old_ip. New IP: $ip.  Details: $(echo "$update_result" | jq -r '.errors')"
+      echo "Cloudflare DDNS: $message"
+      send_gotify_notification "Update Failed" "$message"
       exit 1
       ;;
   esac
 done
-
-
