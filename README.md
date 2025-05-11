@@ -7,18 +7,3 @@ Its support telegram notification too.
 
 - curl
 - jq
-
-## Usage
-
-Before using it, be sure to change the variables in the script.
-
-```
-./cloudflare_ddns.sh
-```
-
-## Usage with crontab
-
-```
-# Run every 5 minutes
-*/5 * * * * /path/to/cloudflare_ddns.sh
-```
